@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mini-gpt"
+version = "0.1.0"
+description = "A GPT-style transformer and inference engine built from scratch in PyTorch"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Sharan Srinivas Arvind" }]
+keywords = ["transformer", "gpt", "kv-cache", "quantization", "inference"]
+dependencies = ["torch>=2.0", "numpy"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "matplotlib>=3.7", "ruff"]
+
+[project.scripts]
+minigpt-train = "minigpt.train:main"
+minigpt-generate = "minigpt.generate:main"
+minigpt-bench = "minigpt.benchmark:main"
+
+[tool.setuptools.packages.find]
+include = ["minigpt*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

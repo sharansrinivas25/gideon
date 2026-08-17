@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# data is downloaded by scripts, not committed
+data/*.txt
+
+# large checkpoints; benchmark JSON and figures ARE committed
+results/*.pt
+
+.DS_Store
+.vscode/
+.idea/
