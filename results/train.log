@@ -1,0 +1,17 @@
+model: 2,669,184 non-embedding parameters
+data:  CharDataset(train=1,003,854 tokens, val=111,540 tokens, vocab=65)
+iter     0 | train 4.2164 | val 4.2126 | lr 1.00e-05 | 0.3 min
+iter   250 | train 2.3495 | val 2.3591 | lr 9.94e-04 | 4.2 min
+iter   500 | train 2.0819 | val 2.1290 | lr 9.58e-04 | 8.0 min
+iter   750 | train 1.8877 | val 1.9915 | lr 8.93e-04 | 11.7 min
+iter  1000 | train 1.7410 | val 1.8852 | lr 8.03e-04 | 15.4 min
+iter  1250 | train 1.6582 | val 1.8338 | lr 6.94e-04 | 19.2 min
+iter  1500 | train 1.5810 | val 1.7598 | lr 5.74e-04 | 23.1 min
+iter  1750 | train 1.5516 | val 1.7415 | lr 4.53e-04 | 27.0 min
+iter  2000 | train 1.5086 | val 1.6884 | lr 3.39e-04 | 30.8 min
+iter  2250 | train 1.4824 | val 1.6719 | lr 2.41e-04 | 34.8 min
+iter  2500 | train 1.4643 | val 1.6540 | lr 1.64e-04 | 38.7 min
+iter  2750 | train 1.4460 | val 1.6348 | lr 1.16e-04 | 42.6 min
+iter  3000 | train 1.4350 | val 1.6318 | lr 1.00e-04 | 46.4 min
+done in 46.4 min | best val loss 1.6318
+history -> results/training_history.json

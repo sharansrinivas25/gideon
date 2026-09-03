@@ -89,13 +89,11 @@ def figure_loss() -> None:
                 color=S2, fontweight="bold", va="center", fontsize=9.5)
 
     best = min(va)
-    ax.annotate(
-        f"best val {best:.3f}",
-        (it[va.index(best)], best),
-        xytext=(0, -22), textcoords="offset points",
-        color=INK_2, fontsize=9, ha="center",
-        arrowprops=dict(arrowstyle="-", color=MUTED, linewidth=0.8),
-    )
+    # Stated as a caption rather than an arrow annotation: at this scale the
+    # curves converge into the bottom-right corner and a leader line lands on
+    # top of the direct labels.
+    ax.text(0.97, 0.62, f"best validation loss  {best:.3f}", transform=ax.transAxes,
+            ha="right", color=INK_2, fontsize=9.5)
 
     ax.set_title("Training and validation loss")
     _clean(ax, "iteration", "cross-entropy loss (nats/token)")
@@ -188,6 +186,36 @@ def figure_quantization() -> None:
     print("wrote docs/quantization.png")
 
 
+def figure_window_policy() -> None:
+    path = RESULTS / "benchmarks.json"
+    if not path.exists():
+        return
+    wp = json.loads(path.read_text()).get("window_policy")
+    if not wp:
+        return
+
+    order = ["no cache (reference)", "reprefill", "evict"]
+    labels = ["no cache\n(reference)", "reprefill\n(default)", "evict\n(slide window)"]
+    vals = [wp[k]["val_loss_past_window"] for k in order]
+
+    fig, ax = plt.subplots(figsize=(7.0, 4.2))
+    bars = ax.bar(labels, vals, color=[S1, S3, S2], width=0.58)
+    for rect, v, key in zip(bars, vals, order):
+        d = wp[key]["delta_vs_reference"]
+        note = f"{v:.3f}" if key == order[0] else f"{v:.3f}  ({d:+.3f})"
+        ax.annotate(note, (rect.get_x() + rect.get_width() / 2, v),
+                    xytext=(0, 5), textcoords="offset points", ha="center",
+                    color=INK_2, fontsize=9.5, fontweight="bold")
+
+    ax.axhline(vals[0], color=AXIS, linewidth=1, linestyle="--")
+    ax.set_title("Cost of each long-context cache policy")
+    _clean(ax, "", "loss on held-out text past the window\n(nats/token, lower is better)")
+    ax.set_ylim(0, max(vals) * 1.2)
+    fig.savefig(DOCS / "window_policy.png")
+    plt.close(fig)
+    print("wrote docs/window_policy.png")
+
+
 def figure_kv_memory() -> None:
     path = RESULTS / "benchmarks.json"
     if not path.exists():
@@ -221,6 +249,7 @@ def main() -> None:
     figure_loss()
     figure_kv_cache()
     figure_quantization()
+    figure_window_policy()
     figure_kv_memory()
 
 
