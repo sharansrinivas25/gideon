@@ -165,7 +165,7 @@ def main() -> None:
 
     from .checkpoint import load_checkpoint
 
-    ap = argparse.ArgumentParser(description="Generate text from a mini-gpt checkpoint")
+    ap = argparse.ArgumentParser(description="Generate text from a gideon checkpoint")
     ap.add_argument("--ckpt", default="results/ckpt.pt")
     ap.add_argument("--prompt", default="\n")
     ap.add_argument("--tokens", type=int, default=500)

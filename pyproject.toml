@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mini-gpt"
+name = "gideon"
 version = "0.1.0"
 description = "A GPT-style transformer and inference engine built from scratch in PyTorch"
 readme = "README.md"
@@ -17,12 +17,12 @@ dependencies = ["torch>=2.0", "numpy"]
 dev = ["pytest>=7", "matplotlib>=3.7", "ruff"]
 
 [project.scripts]
-minigpt-train = "minigpt.train:main"
-minigpt-generate = "minigpt.generate:main"
-minigpt-bench = "minigpt.benchmark:main"
+gideon-train = "gideon.train:main"
+gideon-generate = "gideon.generate:main"
+gideon-bench = "gideon.benchmark:main"
 
 [tool.setuptools.packages.find]
-include = ["minigpt*"]
+include = ["gideon*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

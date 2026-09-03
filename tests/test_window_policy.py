@@ -9,9 +9,9 @@ longer occupy.
 import pytest
 import torch
 
-from minigpt.config import GPTConfig
-from minigpt.generate import WINDOW_POLICIES, generate, generate_naive
-from minigpt.model import GPT
+from gideon.config import GPTConfig
+from gideon.generate import WINDOW_POLICIES, generate, generate_naive
+from gideon.model import GPT
 
 
 @pytest.fixture

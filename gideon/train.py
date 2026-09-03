@@ -115,7 +115,7 @@ def train(
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Train mini-gpt on TinyShakespeare")
+    ap = argparse.ArgumentParser(description="Train gideon on TinyShakespeare")
     ap.add_argument("--n-layer", type=int, default=6)
     ap.add_argument("--n-head", type=int, default=6)
     ap.add_argument("--n-embd", type=int, default=384)

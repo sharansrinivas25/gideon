@@ -2,7 +2,7 @@
 
 import pytest
 
-from minigpt.tokenizer import BPETokenizer, CharTokenizer, load_tokenizer
+from gideon.tokenizer import BPETokenizer, CharTokenizer, load_tokenizer
 
 TEXT = "To be, or not to be, that is the question."
 

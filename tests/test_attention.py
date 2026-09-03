@@ -11,8 +11,8 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from minigpt.attention import CausalSelfAttention
-from minigpt.config import GPTConfig
+from gideon.attention import CausalSelfAttention
+from gideon.config import GPTConfig
 
 
 @pytest.fixture

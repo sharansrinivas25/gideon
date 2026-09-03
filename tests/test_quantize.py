@@ -4,10 +4,10 @@ import pytest
 import torch
 import torch.nn as nn
 
-from minigpt.config import GPTConfig
-from minigpt.generate import generate
-from minigpt.model import GPT
-from minigpt.quantize import (
+from gideon.config import GPTConfig
+from gideon.generate import generate
+from gideon.model import GPT
+from gideon.quantize import (
     QuantizedLinear,
     model_size_bytes,
     quantization_error,

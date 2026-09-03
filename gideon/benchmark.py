@@ -233,7 +233,7 @@ def bench_kv_memory(config: GPTConfig) -> list[dict]:
 
 # --------------------------------------------------------------------- #
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Benchmark mini-gpt inference")
+    ap = argparse.ArgumentParser(description="Benchmark gideon inference")
     ap.add_argument("--ckpt", default="results/ckpt.pt")
     ap.add_argument("--out", default="results/benchmarks.json")
     ap.add_argument("--device", default="cpu")

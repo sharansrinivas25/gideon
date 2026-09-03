@@ -7,14 +7,14 @@ test:
 	python -m pytest tests/ -v
 
 train:
-	python -m minigpt.train --n-layer 6 --n-head 6 --n-embd 192 \
+	python -m gideon.train --n-layer 6 --n-head 6 --n-embd 192 \
 		--block-size 128 --batch-size 32 --max-iters 3000 --lr 1e-3
 
 generate:
-	python -m minigpt.generate --ckpt results/ckpt.pt --tokens 500 --temperature 0.8
+	python -m gideon.generate --ckpt results/ckpt.pt --tokens 500 --temperature 0.8
 
 bench:
-	python -m minigpt.benchmark --ckpt results/ckpt.pt --out results/benchmarks.json
+	python -m gideon.benchmark --ckpt results/ckpt.pt --out results/benchmarks.json
 
 figures:
 	python scripts/make_figures.py
