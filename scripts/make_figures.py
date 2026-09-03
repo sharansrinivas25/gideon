@@ -1,9 +1,4 @@
-"""Generate the README figures from the recorded training history and benchmarks.
-
-Reads ``results/training_history.json`` and ``results/benchmarks.json`` and
-writes PNGs into ``docs/``. Nothing here invents numbers - if a results file is
-missing, the corresponding figure is skipped.
-"""
+"""Generate the README figures from results/*.json into docs/."""
 
 from __future__ import annotations
 
@@ -15,8 +10,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 
-# Validated categorical palette (light surface). Slots are assigned in fixed
-# order and never cycled.
 SURFACE = "#fcfcfb"
 INK = "#0b0b0b"
 INK_2 = "#52514e"
@@ -58,7 +51,7 @@ plt.rcParams.update({
 
 
 def _clean(ax, xlabel: str = "", ylabel: str = "") -> None:
-    """Recessive chrome: no top/right spines, hairline remainder."""
+    """Drop the top/right spines."""
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)
     for side in ("left", "bottom"):
@@ -82,16 +75,13 @@ def figure_loss() -> None:
     ax.plot(it, tr, color=S1, linewidth=2, label="train")
     ax.plot(it, va, color=S2, linewidth=2, label="validation")
 
-    # Direct labels at the line ends - identity is never carried by color alone.
+    # label the lines directly as well as in the legend
     ax.annotate("train", (it[-1], tr[-1]), xytext=(6, 0), textcoords="offset points",
                 color=S1, fontweight="bold", va="center", fontsize=9.5)
     ax.annotate("validation", (it[-1], va[-1]), xytext=(6, 0), textcoords="offset points",
                 color=S2, fontweight="bold", va="center", fontsize=9.5)
 
     best = min(va)
-    # Stated as a caption rather than an arrow annotation: at this scale the
-    # curves converge into the bottom-right corner and a leader line lands on
-    # top of the direct labels.
     ax.text(0.97, 0.62, f"best validation loss  {best:.3f}", transform=ax.transAxes,
             ha="right", color=INK_2, fontsize=9.5)
 
@@ -117,7 +107,6 @@ def figure_kv_cache() -> None:
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11.0, 4.2))
 
-    # Left: wall-clock time. Separate subplots rather than a second y-axis.
     ax1.plot(n, naive, color=S2, linewidth=2, marker="o", markersize=5,
              markeredgecolor=SURFACE, markeredgewidth=1.5, label="no cache")
     ax1.plot(n, cached, color=S1, linewidth=2, marker="o", markersize=5,
@@ -132,7 +121,6 @@ def figure_kv_cache() -> None:
     _clean(ax1, "tokens generated", "seconds")
     ax1.legend(loc="upper left", labelcolor=INK_2)
 
-    # Right: the speedup ratio.
     bars = ax2.bar([str(x) for x in n], speed, color=S1, width=0.62)
     for rect, s in zip(bars, speed):
         ax2.annotate(f"{s:.1f}x", (rect.get_x() + rect.get_width() / 2, s),

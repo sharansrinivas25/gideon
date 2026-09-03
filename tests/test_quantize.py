@@ -30,7 +30,7 @@ def test_quantized_values_fit_int8():
 
 
 def test_per_channel_scales_track_row_magnitude():
-    """A row with a huge outlier must not degrade the other rows' resolution."""
+    """An outlier row shouldn't degrade the other rows."""
     w = torch.randn(4, 32) * 0.01
     w[0] *= 1000.0                       # one wildly-scaled row
     q, s = quantize_tensor_per_channel(w)

@@ -1,14 +1,8 @@
 """Tokenisers.
 
-Two implementations, both satisfying the same tiny interface (`encode`,
-`decode`, `vocab_size`):
-
-* ``CharTokenizer``  - one token per character. Trivial, and what the shipped
-  checkpoint uses, so the interesting part of the project stays the transformer.
-* ``BPETokenizer``   - byte-level byte-pair encoding trained from scratch
-  (the same algorithm GPT-2 uses, minus the regex pre-tokeniser). Included
-  because "how does a tokeniser actually work" is a standard interview question
-  and the answer is much more convincing when you have written the merge loop.
+CharTokenizer is one token per character and is what the checkpoint uses.
+BPETokenizer is byte-level BPE trained from scratch (GPT-2's algorithm without
+the regex pre-tokeniser). Both expose encode / decode / vocab_size.
 """
 
 from __future__ import annotations
@@ -36,8 +30,7 @@ class CharTokenizer:
         return len(self.chars)
 
     def encode(self, text: str) -> list[int]:
-        # Unknown characters are dropped rather than crashing: at inference time
-        # a stray character in a prompt should not take the server down.
+        # drop unknown characters rather than crashing on a stray prompt char
         return [self.stoi[c] for c in text if c in self.stoi]
 
     def decode(self, ids: Iterable[int]) -> str:
@@ -56,12 +49,10 @@ class CharTokenizer:
 
 
 class BPETokenizer:
-    """Byte-level BPE trained with the classic merge loop.
+    """Byte-level BPE.
 
-    Training: start with the 256 raw bytes as the vocabulary, then repeatedly
-    find the most frequent adjacent pair of tokens and mint a new token for it.
-    Each merge is recorded in order; encoding replays the merges in that same
-    order, which is what makes the scheme deterministic and reversible.
+    Start from the 256 bytes, repeatedly merge the most frequent adjacent pair.
+    Encoding replays the merges in the order they were learned.
     """
 
     def __init__(self, merges: dict[tuple[int, int], int] | None = None):
@@ -105,7 +96,7 @@ class BPETokenizer:
                 break
             pair, freq = counts.most_common(1)[0]
             if freq < 2:
-                break  # nothing left worth merging
+                break
             new_id = 256 + i
             ids = self._merge(ids, pair, new_id)
             self.merges[pair] = new_id
@@ -116,8 +107,7 @@ class BPETokenizer:
 
     def encode(self, text: str) -> list[int]:
         ids = list(text.encode("utf-8"))
-        # Apply merges in the order they were learned. Greedily picking the
-        # lowest-numbered applicable merge each round reproduces training order.
+        # lowest-numbered applicable merge each round == training order
         while len(ids) >= 2:
             counts = self._pair_counts(ids)
             candidates = [p for p in counts if p in self.merges]
@@ -136,7 +126,6 @@ class BPETokenizer:
             json.dumps(
                 {
                     "type": "bpe",
-                    # JSON keys must be strings
                     "merges": [[a, b, nid] for (a, b), nid in self.merges.items()],
                 }
             ),

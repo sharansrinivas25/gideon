@@ -1,9 +1,4 @@
-"""Attention correctness.
-
-The hand-written attention is checked against two independent references:
-PyTorch's fused ``scaled_dot_product_attention`` and a deliberately naive
-loop-based implementation. If all three agree, the maths is right.
-"""
+"""Attention correctness, checked against torch's fused kernel and a naive loop."""
 
 import math
 
@@ -27,7 +22,7 @@ def test_output_shape(config):
 
 
 def test_manual_matches_pytorch_fused(config):
-    """Our softmax(QK^T/sqrt(d))V must equal the fused kernel."""
+    """Manual attention should match the fused kernel."""
     torch.manual_seed(0)
     attn = CausalSelfAttention(config, use_flash=False).eval()
     flash = CausalSelfAttention(config, use_flash=True).eval()
@@ -39,7 +34,7 @@ def test_manual_matches_pytorch_fused(config):
 
 
 def test_manual_matches_naive_loop(config):
-    """Check the vectorised implementation against an unmistakably correct loop."""
+    """Check the vectorised version against an explicit loop."""
     torch.manual_seed(0)
     attn = CausalSelfAttention(config, use_flash=False).eval()
     B, T, C = 1, 6, config.n_embd
@@ -68,11 +63,7 @@ def test_manual_matches_naive_loop(config):
 
 
 def test_causality_future_tokens_cannot_leak(config):
-    """Changing token t must not change the output at any position < t.
-
-    This is the property the whole architecture rests on: if it fails, the
-    model is cheating during training and will fall apart at generation time.
-    """
+    """Changing token t must not change any output before t."""
     torch.manual_seed(0)
     attn = CausalSelfAttention(config).eval()
     x = torch.randn(1, 10, config.n_embd)
@@ -88,7 +79,7 @@ def test_causality_future_tokens_cannot_leak(config):
 
 
 def test_attention_weights_are_a_distribution(config):
-    """Rows of the attention matrix sum to 1 and are zero above the diagonal."""
+    """Attention rows sum to 1 and are zero above the diagonal."""
     torch.manual_seed(0)
     attn = CausalSelfAttention(config).eval()
     B, T, C = 1, 8, config.n_embd

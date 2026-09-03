@@ -1,10 +1,4 @@
-"""Dataset handling.
-
-The corpus is small enough to hold in memory as a single flat tensor of token
-ids. Batches are drawn by sampling random start offsets, which is the standard
-approach for language-model pretraining: there are no document boundaries to
-respect in TinyShakespeare, so every window is a valid training example.
-"""
+"""Dataset handling. Corpus fits in memory; batches are random windows."""
 
 from __future__ import annotations
 
@@ -37,8 +31,7 @@ class CharDataset:
         self.block_size = block_size
         data = torch.tensor(tokenizer.encode(text), dtype=torch.long)
         n = int(len(data) * split_ratio)
-        # Split by position, not randomly: a random split would leak
-        # neighbouring characters of a val window into the train set.
+        # split by position, not randomly, or val windows leak into train
         self.train_data = data[:n]
         self.val_data = data[n:]
 
@@ -60,6 +53,6 @@ class CharDataset:
             len(data) - self.block_size - 1, (batch_size,), generator=generator
         )
         x = torch.stack([data[i : i + self.block_size] for i in ix])
-        # y is x shifted by one: the label for position t is the token at t+1.
+        # y is x shifted by one
         y = torch.stack([data[i + 1 : i + 1 + self.block_size] for i in ix])
         return x.to(device), y.to(device)
