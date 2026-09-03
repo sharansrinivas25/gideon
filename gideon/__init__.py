@@ -1,4 +1,4 @@
-"""mini-gpt: a GPT-style transformer and inference engine built from scratch."""
+"""Gideon: a GPT-style transformer and inference engine built from scratch."""
 
 from .config import GPTConfig, TrainConfig
 from .model import GPT, Block, MLP

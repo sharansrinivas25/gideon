@@ -12,10 +12,10 @@ import time
 import pytest
 import torch
 
-from minigpt.config import GPTConfig
-from minigpt.generate import generate, generate_naive
-from minigpt.kvcache import LayerKVCache
-from minigpt.model import GPT
+from gideon.config import GPTConfig
+from gideon.generate import generate, generate_naive
+from gideon.kvcache import LayerKVCache
+from gideon.model import GPT
 
 
 @pytest.fixture

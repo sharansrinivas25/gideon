@@ -3,9 +3,9 @@
 import pytest
 import torch
 
-from minigpt.config import GPTConfig
-from minigpt.generate import _sample_from_logits, generate
-from minigpt.model import GPT
+from gideon.config import GPTConfig
+from gideon.generate import _sample_from_logits, generate
+from gideon.model import GPT
 
 
 @pytest.fixture

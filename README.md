@@ -1,7 +1,7 @@
-# mini-gpt
+# Gideon
 
-A GPT-style decoder-only transformer **and its inference engine**, written from
-scratch in PyTorch. No `nn.Transformer`, no `nn.MultiheadAttention`, no
+**Gideon** is a GPT-style decoder-only transformer **and its inference engine**,
+written from scratch in PyTorch. No `nn.Transformer`, no `nn.MultiheadAttention`, no
 HuggingFace — the attention maths, the KV cache, the tokeniser and the int8
 quantiser are all implemented here and all covered by tests.
 
@@ -9,7 +9,7 @@ The point of the project is not "I can train a small language model." It is
 **understanding what happens between a request arriving and a token coming
 back**, and being able to measure it.
 
-[![tests](https://github.com/sharansrinivas25/mini-gpt/actions/workflows/tests.yml/badge.svg)](https://github.com/sharansrinivas25/mini-gpt/actions/workflows/tests.yml)
+[![tests](https://github.com/sharansrinivas25/gideon/actions/workflows/tests.yml/badge.svg)](https://github.com/sharansrinivas25/gideon/actions/workflows/tests.yml)
 
 ---
 
@@ -39,13 +39,13 @@ speed**.
 
 | Component | File | What it demonstrates |
 |---|---|---|
-| Multi-head causal self-attention | `minigpt/attention.py` | QKV projection, head splitting, scaled dot product, causal masking — written out, not called |
-| KV cache | `minigpt/kvcache.py` | Pre-allocated per-layer cache; the reason decoding is linear rather than quadratic |
-| Transformer stack | `minigpt/model.py` | Pre-norm blocks, weight tying, depth-scaled init, last-position-only LM head |
-| Tokenisers | `minigpt/tokenizer.py` | Character-level, plus byte-level **BPE trained with the merge loop** |
-| Sampling | `minigpt/generate.py` | Temperature, top-k, nucleus (top-p); cached and uncached decoders with identical semantics |
-| int8 quantisation | `minigpt/quantize.py` | Symmetric per-output-channel weight quantisation, from scratch |
-| Benchmarks | `minigpt/benchmark.py` | TTFT, per-token decode latency, cache speedup, memory scaling |
+| Multi-head causal self-attention | `gideon/attention.py` | QKV projection, head splitting, scaled dot product, causal masking — written out, not called |
+| KV cache | `gideon/kvcache.py` | Pre-allocated per-layer cache; the reason decoding is linear rather than quadratic |
+| Transformer stack | `gideon/model.py` | Pre-norm blocks, weight tying, depth-scaled init, last-position-only LM head |
+| Tokenisers | `gideon/tokenizer.py` | Character-level, plus byte-level **BPE trained with the merge loop** |
+| Sampling | `gideon/generate.py` | Temperature, top-k, nucleus (top-p); cached and uncached decoders with identical semantics |
+| int8 quantisation | `gideon/quantize.py` | Symmetric per-output-channel weight quantisation, from scratch |
+| Benchmarks | `gideon/benchmark.py` | TTFT, per-token decode latency, cache speedup, memory scaling |
 | Tests | `tests/` | 61 tests, including cached-vs-uncached output equivalence |
 
 ---
@@ -324,7 +324,7 @@ The choices worth defending in an interview:
 
 ### Sample output
 
-`python -m minigpt.generate --prompt "ROMEO:" --tokens 480 --temperature 0.8 --top-k 40 --seed 7`
+`python -m gideon.generate --prompt "ROMEO:" --tokens 480 --temperature 0.8 --top-k 40 --seed 7`
 
 ```
 ROMEO:
@@ -368,11 +368,11 @@ make bench       # writes results/benchmarks.json
 make figures     # regenerates the plots in docs/
 
 # generate text
-python -m minigpt.generate --ckpt results/ckpt.pt --prompt "ROMEO:" --tokens 500
+python -m gideon.generate --ckpt results/ckpt.pt --prompt "ROMEO:" --tokens 500
 
 # compare the decoders yourself
-python -m minigpt.generate --ckpt results/ckpt.pt --tokens 500 --no-cache
-python -m minigpt.generate --ckpt results/ckpt.pt --tokens 500 --int8
+python -m gideon.generate --ckpt results/ckpt.pt --tokens 500 --no-cache
+python -m gideon.generate --ckpt results/ckpt.pt --tokens 500 --int8
 ```
 
 The trained checkpoint is not committed (10.8 MB); `make train` reproduces it in

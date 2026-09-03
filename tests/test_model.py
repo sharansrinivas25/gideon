@@ -5,8 +5,8 @@ import math
 import pytest
 import torch
 
-from minigpt.config import GPTConfig
-from minigpt.model import GPT
+from gideon.config import GPTConfig
+from gideon.model import GPT
 
 
 @pytest.fixture
