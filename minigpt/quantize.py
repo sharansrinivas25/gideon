@@ -117,11 +117,16 @@ def dynamic_quantize_torch(model: nn.Module) -> nn.Module:
 
 
 def model_size_bytes(model: nn.Module) -> int:
-    """Bytes of parameters + buffers, counting int8 buffers as 1 byte each."""
-    total = 0
-    for p in model.parameters():
-        total += p.numel() * p.element_size()
-    for b in model.buffers():
-        if b is not None:
-            total += b.numel() * b.element_size()
-    return total
+    """Serialised size of the model in bytes.
+
+    Measured by serialising rather than by summing ``parameters()`` and
+    ``buffers()``. PyTorch's dynamically-quantised Linear stores its weights in
+    a *packed* opaque object that shows up in neither collection, so the
+    summing approach reports it as almost free - a 20x "saving" that is purely
+    an accounting artefact. Serialising counts what is actually there.
+    """
+    import io
+
+    buf = io.BytesIO()
+    torch.save(model.state_dict(), buf)
+    return buf.getbuffer().nbytes
