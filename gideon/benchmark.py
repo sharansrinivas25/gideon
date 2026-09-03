@@ -1,15 +1,7 @@
 """Benchmark harness.
 
-Measures the two claims this project makes:
-
-1. KV-caching turns generation from quadratic into linear work, and the gap
-   widens with sequence length.
-2. Weight-only int8 shrinks the model ~4x on the Linear layers, and - being
-   weight-only with an fp32 matmul - does *not* by itself make CPU inference
-   faster. PyTorch's dynamic quantisation, which uses real int8 kernels, does.
-
-Everything is measured with warmup, repeated trials, and median reporting, so
-the numbers are reproducible rather than one lucky run.
+Cache speedup, prefill vs decode latency, long-context cache policy, and
+quantisation. Everything is median-of-N after warmup.
 """
 
 from __future__ import annotations
@@ -30,11 +22,7 @@ from .quantize import dynamic_quantize_torch, model_size_bytes, quantize_model
 
 
 def _time_median(fn, repeats: int = 3, warmup: int = 1) -> float:
-    """Median wall-clock seconds over ``repeats`` runs, after warmup.
-
-    Median rather than mean: a single scheduler hiccup skews a mean badly at
-    these timescales, and we care about typical latency, not average-with-tail.
-    """
+    """Median wall-clock seconds over `repeats` runs, after warmup."""
     for _ in range(warmup):
         fn()
     times = []
@@ -79,11 +67,7 @@ def bench_kv_cache(
 
 
 def bench_prefill_vs_decode(model: GPT, prompt_lens: list[int], device: str = "cpu") -> list[dict]:
-    """Split latency into time-to-first-token and per-token decode time.
-
-    These are the two numbers a serving system is actually judged on: TTFT is
-    dominated by the prefill matmuls, decode latency by memory bandwidth.
-    """
+    """Time to first token (prefill) vs per-token decode time."""
     rows = []
     for p in prompt_lens:
         p = min(p, model.config.block_size - 1)
@@ -102,8 +86,7 @@ def bench_prefill_vs_decode(model: GPT, prompt_lens: list[int], device: str = "c
         def decode_step():
             with torch.no_grad():
                 model(one, cache=cache)
-            # Roll the cache back one slot so every trial measures a step at the
-            # same context length rather than a steadily growing one.
+            # roll back one slot so every trial measures the same context length
             for layer in cache.layers:
                 layer.length -= 1
 
@@ -121,7 +104,7 @@ def bench_prefill_vs_decode(model: GPT, prompt_lens: list[int], device: str = "c
 
 
 def bench_quantization(model: GPT, n_tokens: int = 200, device: str = "cpu") -> dict:
-    """Size and latency for fp32, from-scratch int8, and torch dynamic int8."""
+    """Size and latency: fp32 vs from-scratch int8 vs torch dynamic int8."""
     prompt = torch.zeros((1, 1), dtype=torch.long, device=device)
     variants = {
         "fp32": model,
@@ -153,16 +136,10 @@ def bench_quantization(model: GPT, n_tokens: int = 200, device: str = "cpu") -> 
 def bench_window_policy(
     model: GPT, tokenizer, text: str, seq_len: int = 512, device: str = "cpu"
 ) -> dict:
-    """Measure what each long-context cache policy costs in *accuracy*.
+    """What each long-context cache policy costs in accuracy.
 
-    Speed benchmarks alone would make ``evict`` look strictly better, which is
-    backwards. This is teacher-forced: real held-out text is fed through the
-    cached decoder one token at a time and scored against the true next token,
-    counting only positions past ``block_size`` - the region where the policies
-    actually differ.
-
-    The reference is the uncached decoder, which re-runs the full forward pass
-    over the most recent window at every step and is correct by construction.
+    Teacher-forced on held-out text, scoring only positions past block_size.
+    Reference is the uncached decoder.
     """
     block = model.config.block_size
     ids = torch.tensor([tokenizer.encode(text)[: seq_len + 1]], dtype=torch.long, device=device)
@@ -171,7 +148,7 @@ def bench_window_policy(
         raise ValueError("need a sequence longer than block_size to compare policies")
 
     def score(step_logits: list[torch.Tensor]) -> float:
-        """Mean cross-entropy over the positions past the window."""
+        """Mean cross-entropy past the window."""
         logits = torch.cat(step_logits, dim=0)                # (n, vocab)
         targets = ids[0, 1 : n + 1]
         keep = slice(block, n)
@@ -181,7 +158,7 @@ def bench_window_policy(
 
     results = {}
 
-    # --- reference: no cache, full recompute over the recent window ---------
+    # reference: no cache
     outs = []
     for t in range(n):
         ctx = ids[:, max(0, t + 1 - block) : t + 1]
@@ -189,7 +166,6 @@ def bench_window_policy(
         outs.append(lg[:, -1, :])
     results["no cache (reference)"] = round(score(outs), 4)
 
-    # --- cached policies ----------------------------------------------------
     chunk = max(1, block // 4)
     for policy in ("reprefill", "evict"):
         cache = model.new_cache(batch_size=1, device=device)
@@ -219,10 +195,7 @@ def bench_window_policy(
 
 
 def bench_kv_memory(config: GPTConfig) -> list[dict]:
-    """KV-cache memory footprint - the thing that actually caps your batch size.
-
-    bytes = 2 (K and V) * n_layer * n_head * head_dim * seq_len * batch * 4 (fp32)
-    """
+    """KV cache footprint: 2 * n_layer * n_embd * seq_len * batch * 4 bytes."""
     rows = []
     for seq in [128, 512, 2048, 8192]:
         for batch in [1, 8, 32]:
@@ -268,7 +241,7 @@ def main() -> None:
 
     print("\nLong-context cache policy (held-out text, positions past the window)")
     text = download_tinyshakespeare().read_text(encoding="utf-8")
-    val_text = text[int(len(text) * 0.9):]      # the same split training held out
+    val_text = text[int(len(text) * 0.9):]      # same split training held out
     results["window_policy"] = bench_window_policy(model, tokenizer, val_text, 512, args.device)
 
     print("\nQuantisation")

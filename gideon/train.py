@@ -1,9 +1,4 @@
-"""Training loop.
-
-Deliberately plain: AdamW, cosine schedule with linear warmup, gradient
-clipping, periodic evaluation on a held-out split. No tricks that would obscure
-what the model is learning.
-"""
+"""Training loop: AdamW, warmup into cosine decay, grad clipping, periodic eval."""
 
 from __future__ import annotations
 
@@ -23,12 +18,7 @@ from .tokenizer import CharTokenizer
 
 
 def lr_at(it: int, cfg: TrainConfig) -> float:
-    """Linear warmup then cosine decay to ``learning_rate * min_lr_ratio``.
-
-    Warmup exists because Adam's second-moment estimate is garbage for the
-    first few steps; taking full-size steps on a garbage estimate is how you
-    get a loss spike you never recover from.
-    """
+    """Linear warmup, then cosine decay to learning_rate * min_lr_ratio."""
     if it < cfg.warmup_iters:
         return cfg.learning_rate * (it + 1) / cfg.warmup_iters
     if it > cfg.max_iters:
@@ -41,7 +31,7 @@ def lr_at(it: int, cfg: TrainConfig) -> float:
 
 @torch.no_grad()
 def estimate_loss(model: GPT, dataset: CharDataset, cfg: TrainConfig, device: str) -> dict:
-    """Average loss over several batches - one batch is far too noisy to act on."""
+    """Average loss over several batches (one batch is too noisy)."""
     model.eval()
     out = {}
     for split in ("train", "val"):
@@ -99,14 +89,11 @@ def train(
         if it == train_cfg.max_iters:
             break
 
-        # gradient accumulation lets an effective batch larger than memory
         optimizer.zero_grad(set_to_none=True)
         for _ in range(train_cfg.grad_accum_steps):
             x, y = dataset.get_batch("train", train_cfg.batch_size, device)
             _, loss = model(x, targets=y)
             (loss / train_cfg.grad_accum_steps).backward()
-        # Clip before stepping: one bad batch can otherwise produce a gradient
-        # large enough to knock the model out of the basin it was converging to.
         torch.nn.utils.clip_grad_norm_(model.parameters(), train_cfg.grad_clip)
         optimizer.step()
 

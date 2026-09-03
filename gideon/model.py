@@ -14,12 +14,7 @@ from .kvcache import KVCache
 
 
 class MLP(nn.Module):
-    """Position-wise feed-forward network: 4x expansion, GELU, back down.
-
-    The 4x ratio is the GPT-2 convention. This block is where most of the
-    parameters live (8 * C^2 versus 4 * C^2 for attention), which is why
-    quantising Linear layers moves the memory needle so much.
-    """
+    """Feed-forward: 4x expansion, GELU, back down (GPT-2 convention)."""
 
     def __init__(self, config: GPTConfig):
         super().__init__()
@@ -32,12 +27,7 @@ class MLP(nn.Module):
 
 
 class Block(nn.Module):
-    """One transformer block, pre-norm.
-
-    Pre-norm (``x + f(norm(x))``) rather than post-norm (``norm(x + f(x))``)
-    because it keeps a clean identity path from input to output, which is what
-    lets deep stacks train without a warmup-heavy schedule.
-    """
+    """One pre-norm transformer block: x + f(norm(x))."""
 
     def __init__(self, config: GPTConfig, use_flash: bool = False):
         super().__init__()
@@ -66,16 +56,12 @@ class GPT(nn.Module):
         self.ln_f = nn.LayerNorm(config.n_embd, bias=config.bias)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
-        # Weight tying: the input embedding and the output projection are the
-        # same matrix. Saves vocab*n_embd parameters and consistently improves
-        # perplexity, because "the vector that means token X" and "the vector
-        # you dot against to predict token X" are the same kind of object.
+        # weight tying: input embedding and output projection share a matrix
         self.tok_emb.weight = self.lm_head.weight
 
         self.apply(self._init_weights)
-        # Scaled init for residual projections: with n_layer residual adds, the
-        # variance at the output grows with depth unless each contribution is
-        # shrunk by 1/sqrt(2 * n_layer). (GPT-2 paper, section 2.3.)
+        # scale residual projections by 1/sqrt(2 * n_layer) so variance doesn't
+        # grow with depth (GPT-2 paper, 2.3)
         for name, p in self.named_parameters():
             if name.endswith("proj.weight"):
                 nn.init.normal_(p, mean=0.0, std=0.02 / math.sqrt(2 * config.n_layer))
@@ -109,8 +95,7 @@ class GPT(nn.Module):
                 f"sequence length {past_len + T} exceeds block_size {self.config.block_size}"
             )
 
-        # Positions continue from wherever the cache left off, so a cached
-        # decode step for the 50th token gets position 49, not position 0.
+        # positions continue from wherever the cache left off
         pos = torch.arange(past_len, past_len + T, device=idx.device)
 
         x = self.drop(self.tok_emb(idx) + self.pos_emb(pos))
@@ -125,9 +110,7 @@ class GPT(nn.Module):
             )
             return logits, loss
 
-        # Inference: only the last position's logits are needed to sample the
-        # next token, so skip the lm_head matmul on every other position. On a
-        # 256-token prefill that is 256x less work in this layer.
+        # only the last position is needed to sample, so skip the rest
         logits = self.lm_head(x[:, [-1], :])
         return logits, None
 
@@ -145,11 +128,7 @@ class GPT(nn.Module):
         )
 
     def configure_optimizer(self, weight_decay: float, lr: float, betas: tuple[float, float]):
-        """AdamW with decay on matmul weights only.
-
-        Biases, LayerNorm gains and embeddings are 1-D (or act like it) and
-        decaying them toward zero hurts more than it regularises.
-        """
+        """AdamW, weight decay on 2-D params only (not biases or LayerNorm)."""
         decay, no_decay = [], []
         for _, p in self.named_parameters():
             if not p.requires_grad:

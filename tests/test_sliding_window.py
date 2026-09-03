@@ -1,10 +1,7 @@
-"""Sliding-window eviction: the mechanism that keeps long generations cheap.
+"""Sliding-window eviction.
 
-Equivalence with the naive decoder only holds *within* ``block_size``; past it
-the rolling cache is a documented approximation (surviving entries are
-re-indexed to the front of the window). These tests pin down what must still be
-true: the eviction moves the right data, the cache never overflows, and long
-generations stay finite and in-vocabulary.
+Equivalence with the naive decoder only holds within block_size. Past it these
+check that eviction moves the right data and long generations stay valid.
 """
 
 import time
@@ -61,7 +58,7 @@ def test_evict_zero_is_a_noop():
 
 
 def test_long_generation_stays_valid(config):
-    """Four times the context window must not overflow, NaN, or leave the vocab."""
+    """4x the context window: no overflow, no NaN, tokens stay in vocab."""
     torch.manual_seed(0)
     model = GPT(config).eval()
     prompt = torch.zeros((1, 1), dtype=torch.long)
@@ -72,14 +69,10 @@ def test_long_generation_stays_valid(config):
 
 
 def test_long_generation_is_faster_than_naive():
-    """The whole point: past the window the cache must still beat recomputation.
+    """Past the window the cache should still beat recomputation.
 
-    Before sliding-window eviction this regressed - the cache was rebuilt from
-    scratch every step once full, costing a full forward pass per token.
-
-    Uses a larger model than the other tests on purpose: at toy sizes per-step
-    Python overhead dominates the matmuls and the comparison measures the
-    interpreter rather than the algorithm.
+    Bigger model than the other tests: at toy sizes Python overhead dominates
+    and the comparison measures the interpreter, not the algorithm.
     """
     torch.manual_seed(0)
     big = GPTConfig(vocab_size=32, block_size=64, n_layer=4, n_head=4, n_embd=128, dropout=0.0)
@@ -99,7 +92,7 @@ def test_long_generation_is_faster_than_naive():
 
 
 def test_equivalence_still_holds_within_the_window(config):
-    """Eviction must not disturb the exact-match guarantee below block_size."""
+    """Below block_size nothing has been evicted, so output must match exactly."""
     torch.manual_seed(0)
     model = GPT(config).eval()
     prompt = torch.zeros((1, 2), dtype=torch.long)

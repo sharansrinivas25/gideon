@@ -1,4 +1,4 @@
-"""Model-level behaviour: shapes, loss, gradients, weight tying."""
+"""Shapes, loss, gradients, weight tying."""
 
 import math
 
@@ -27,11 +27,7 @@ def test_forward_shapes(config):
 
 
 def test_initial_loss_is_near_uniform(config):
-    """An untrained model should be about as confused as a uniform guess.
-
-    Expected cross-entropy = ln(vocab_size). A much higher value means the
-    initialisation is broken; a much lower one means something is leaking.
-    """
+    """Untrained loss should be about ln(vocab_size)."""
     torch.manual_seed(0)
     model = GPT(config)
     idx = torch.randint(0, config.vocab_size, (8, 16))
@@ -45,7 +41,7 @@ def test_weights_are_tied(config):
 
 
 def test_all_parameters_receive_gradients(config):
-    """A parameter with no gradient is a parameter that is silently dead."""
+    """Every parameter should get a gradient."""
     model = GPT(config)
     idx = torch.randint(0, config.vocab_size, (4, 12))
     _, loss = model(idx, targets=idx)
@@ -55,11 +51,7 @@ def test_all_parameters_receive_gradients(config):
 
 
 def test_model_can_overfit_a_single_batch(config):
-    """The sanity check that catches almost every training bug.
-
-    If a model cannot drive the loss to near-zero on one fixed batch, the
-    problem is the model or the optimiser, not the data or the hyperparameters.
-    """
+    """If it can't overfit one batch, the model or optimiser is broken."""
     torch.manual_seed(0)
     model = GPT(config)
     model.train()
@@ -84,7 +76,7 @@ def test_rejects_sequence_longer_than_block_size(config):
 
 
 def test_param_count_matches_hand_calculation():
-    """Guards against an accidental extra/missing layer."""
+    """Catches an accidental extra or missing layer."""
     cfg = GPTConfig(vocab_size=100, block_size=32, n_layer=2, n_head=2, n_embd=64, bias=False)
     model = GPT(cfg)
     C, L = cfg.n_embd, cfg.n_layer

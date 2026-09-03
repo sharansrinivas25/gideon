@@ -1,20 +1,7 @@
 """Key/value cache for incremental decoding.
 
-Why this exists
----------------
-A decoder-only transformer is causal: token *t* attends only to tokens
-``<= t``. So when we generate token by token, the keys and values computed for
-tokens ``0..t-1`` are **exactly the same** on every subsequent step. Recomputing
-them turns generation into O(n^2) work per token and O(n^3) for the whole
-sequence. Caching them makes each step O(n) and the sequence O(n^2).
-
-Implementation note
--------------------
-The cache is **pre-allocated** to ``max_seq_len`` and filled in place, rather
-than ``torch.cat``-ing a new tensor each step. Concatenation reallocates and
-copies the whole cache on every token, which quietly reintroduces the quadratic
-memory traffic we were trying to remove. Pre-allocation is what real serving
-stacks (vLLM, TensorRT-LLM) do, modulo paging.
+Pre-allocated to max_seq_len and written in place. Growing it with torch.cat
+would reallocate and copy the whole cache every token.
 """
 
 from __future__ import annotations
@@ -41,16 +28,11 @@ class LayerKVCache:
         self.length = 0  # number of valid positions currently stored
 
     def update(self, k: torch.Tensor, v: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Append ``k``/``v`` (B, nh, T_new, hd) and return the full valid cache.
-
-        Returns views of length ``self.length`` so the caller attends over
-        everything seen so far, not over the zero-padded tail.
-        """
+        """Append k/v (B, nh, T_new, hd) and return the valid slice of the cache."""
         t_new = k.size(2)
         if self.length + t_new > self.max_seq_len:
             raise ValueError(
-                f"KV cache overflow: {self.length} + {t_new} > {self.max_seq_len}. "
-                "Increase block_size or truncate the context."
+                f"KV cache overflow: {self.length} + {t_new} > {self.max_seq_len}"
             )
         start, end = self.length, self.length + t_new
         self.k[:, :, start:end] = k
@@ -59,23 +41,13 @@ class LayerKVCache:
         return self.k[:, :, :end], self.v[:, :, :end]
 
     def evict_oldest(self, n: int) -> None:
-        """Drop the ``n`` oldest positions, sliding the remainder to the front.
-
-        This is what makes generation past ``block_size`` cheap. The naive
-        alternative - reset the cache and re-prefill the recent window - costs a
-        full forward pass over the window on *every* step, which throws away the
-        entire benefit of caching exactly when the sequence is long enough for
-        it to matter.
-
-        The clone is deliberate: ``self.k[:, :, :keep] = self.k[:, :, n:len]``
-        is an overlapping copy on the same storage, and PyTorch does not
-        guarantee the result.
-        """
+        """Drop the n oldest positions, sliding the remainder to the front."""
         if n <= 0:
             return
         n = min(n, self.length)
         keep = self.length - n
         if keep > 0:
+            # clone: overlapping copy on the same storage is undefined in torch
             self.k[:, :, :keep] = self.k[:, :, n : self.length].clone()
             self.v[:, :, :keep] = self.v[:, :, n : self.length].clone()
         self.length = keep

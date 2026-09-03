@@ -1,8 +1,4 @@
-"""Saving and loading checkpoints.
-
-A checkpoint is self-describing: it carries the model config and the tokeniser
-alongside the weights, so ``load_checkpoint`` needs nothing but the file.
-"""
+"""Checkpoints. Config and tokeniser are stored with the weights."""
 
 from __future__ import annotations
 

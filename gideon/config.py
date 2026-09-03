@@ -1,9 +1,6 @@
 """Model and training configuration.
 
-Everything that describes *shape* lives in GPTConfig; everything that describes
-*how we train* lives in TrainConfig. Keeping them apart means the inference
-engine only ever needs GPTConfig, so a checkpoint can be loaded and served
-without dragging training hyper-parameters along.
+Split so that inference only needs GPTConfig.
 """
 
 from __future__ import annotations

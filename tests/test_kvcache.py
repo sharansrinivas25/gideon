@@ -1,9 +1,4 @@
-"""KV-cache correctness.
-
-The cache is an optimisation, so the only acceptable behaviour is that it
-changes nothing about the output. These tests pin that down at three levels:
-raw cache mechanics, single-forward-pass logits, and full sampled sequences.
-"""
+"""KV cache correctness: mechanics, logits, and full sampled sequences."""
 
 import pytest
 import torch
@@ -64,7 +59,7 @@ def test_cache_reset(config):
 # equivalence: cached vs uncached
 # --------------------------------------------------------------------- #
 def test_incremental_logits_match_full_forward(model, config):
-    """Feeding tokens one at a time through the cache must match one big pass."""
+    """One token at a time through the cache == one full pass."""
     torch.manual_seed(1)
     idx = torch.randint(0, config.vocab_size, (1, 10))
 
@@ -81,7 +76,7 @@ def test_incremental_logits_match_full_forward(model, config):
 
 
 def test_prefill_then_decode_matches_full_forward(model, config):
-    """The realistic pattern: batch the prompt, then step one token at a time."""
+    """Prefill the prompt, then step one token at a time."""
     torch.manual_seed(2)
     idx = torch.randint(0, config.vocab_size, (2, 12))
 
@@ -97,7 +92,7 @@ def test_prefill_then_decode_matches_full_forward(model, config):
 
 
 def test_generated_sequences_are_identical(model, config):
-    """Same seed, same settings -> cached and naive decoding produce the same text."""
+    """Same seed: cached and naive decoding give the same tokens."""
     prompt = torch.randint(0, config.vocab_size, (1, 4))
 
     g1 = torch.Generator().manual_seed(42)
@@ -112,7 +107,7 @@ def test_generated_sequences_are_identical(model, config):
 
 
 def test_greedy_decoding_identical(model, config):
-    """Temperature 0 removes sampling noise entirely - the strictest version."""
+    """Greedy decoding, no sampling noise."""
     prompt = torch.randint(0, config.vocab_size, (1, 3))
     naive = generate_naive(model, prompt.clone(), 20, temperature=0.0)
     cached = generate(model, prompt.clone(), 20, temperature=0.0)
@@ -127,7 +122,7 @@ def test_batched_generation_identical(model, config):
 
 
 def test_generation_past_context_window(model, config):
-    """Generating beyond block_size must not crash or corrupt the cache."""
+    """Generating beyond block_size shouldn't crash."""
     prompt = torch.randint(0, config.vocab_size, (1, 4))
     out = generate(model, prompt, max_new_tokens=config.block_size + 10, temperature=0.0)
     assert out.shape == (1, 4 + config.block_size + 10)

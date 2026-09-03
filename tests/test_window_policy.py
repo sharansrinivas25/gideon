@@ -1,10 +1,4 @@
-"""Long-context cache policies.
-
-``reprefill`` recomputes K/V for the recent window so cached entries carry the
-position embedding matching their slot. ``evict`` slides the window without
-recomputing, which is cheaper but leaves stale entries encoded for slots they no
-longer occupy.
-"""
+"""Long-context cache policies: reprefill vs evict."""
 
 import pytest
 import torch
@@ -41,7 +35,7 @@ def test_both_policies_produce_valid_output(model, config, policy):
 
 @pytest.mark.parametrize("policy", WINDOW_POLICIES)
 def test_policies_agree_inside_the_window(model, config, policy):
-    """Below block_size neither policy has fired, so both must match exactly."""
+    """Below block_size neither policy has fired yet."""
     prompt = torch.zeros((1, 2), dtype=torch.long)
     n = config.block_size - 5
     assert torch.equal(
@@ -51,12 +45,11 @@ def test_policies_agree_inside_the_window(model, config, policy):
 
 
 def test_reprefill_tracks_the_uncached_decoder_past_the_window(model, config):
-    """Past the window, reprefill must stay close to full recomputation.
+    """Past the window, reprefill should stay close to full recomputation.
 
-    Not bit-identical - reprefill attends over a slightly shorter window between
-    refreshes - but the predicted distribution should barely move. This is the
-    test that would have caught the original eviction bug, where output
-    collapsed into noise the moment the context filled up.
+    Not bit-identical (it attends over a slightly shorter window between
+    refreshes) but the distribution should barely move. This is the test that
+    would have caught the original eviction bug.
     """
     torch.manual_seed(3)
     block = config.block_size

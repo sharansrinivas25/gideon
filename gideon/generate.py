@@ -1,15 +1,8 @@
-"""Sampling / decoding.
+"""Sampling and decoding.
 
-Two generation functions with deliberately identical semantics:
-
-* :func:`generate_naive` - no cache. Every step re-runs the model over the whole
-  prefix. This is the baseline the speedup is measured against.
-* :func:`generate`       - prefill once into a KV cache, then feed one token per
-  step.
-
-Given the same seed and sampling settings the two produce **identical token
-sequences**; ``tests/test_kvcache.py`` asserts exactly that. If they ever
-diverge, the cache is wrong.
+generate_naive re-runs the model over the whole prefix each step; generate
+prefills into a KV cache then feeds one token at a time. Same seed and
+settings give identical output (asserted in tests/test_kvcache.py).
 """
 
 from __future__ import annotations
@@ -19,19 +12,11 @@ import torch.nn.functional as F
 
 from .model import GPT
 
-#: What to do once the KV cache reaches ``block_size``.
-#:
-#: ``"reprefill"``  recompute K/V for the recent window so every cached entry
-#:                  carries the position embedding matching its slot. Costs one
-#:                  prefill per ``block_size/4`` steps (~10% overhead) and keeps
-#:                  output quality intact. Default.
-#: ``"evict"``      slide the window by dropping the oldest entries, recomputing
-#:                  nothing. Faster, but with *learned absolute* position
-#:                  embeddings the surviving entries now sit at slots they were
-#:                  not encoded for, and generation visibly degenerates. This is
-#:                  the correct policy for RoPE, where position is applied at
-#:                  attention time and can be re-indexed - it is kept here to
-#:                  make that trade-off measurable rather than theoretical.
+# What to do when the KV cache reaches block_size.
+#   reprefill: recompute K/V for the recent window, so each entry's position
+#              embedding matches its slot. ~10% overhead. Default.
+#   evict:     drop the oldest entries. Cheaper, but wrong for learned absolute
+#              positions (see README); correct under RoPE.
 WINDOW_POLICIES = ("reprefill", "evict")
 
 
@@ -44,8 +29,7 @@ def _sample_from_logits(
 ) -> torch.Tensor:
     """Turn logits into one sampled token id per batch row. (B, 1)"""
     if temperature <= 0:
-        # Greedy: temperature -> 0 is the argmax limit of the softmax.
-        return logits.argmax(dim=-1, keepdim=True)
+        return logits.argmax(dim=-1, keepdim=True)   # greedy
 
     logits = logits / temperature
 
@@ -55,8 +39,7 @@ def _sample_from_logits(
         logits = logits.masked_fill(logits < kth, float("-inf"))
 
     if top_p is not None:
-        # Nucleus sampling: keep the smallest set of tokens whose cumulative
-        # probability reaches top_p, drop the tail.
+        # keep the smallest set of tokens whose cumulative prob reaches top_p
         sorted_logits, sorted_idx = torch.sort(logits, descending=True, dim=-1)
         cum = sorted_logits.softmax(dim=-1).cumsum(dim=-1)
         remove = cum - sorted_logits.softmax(dim=-1) > top_p
@@ -77,11 +60,11 @@ def generate_naive(
     top_p: float | None = None,
     generator: torch.Generator | None = None,
 ) -> torch.Tensor:
-    """Baseline decoding: recompute the full forward pass every step."""
+    """Baseline: full forward pass every step, no cache."""
     model.eval()
     block = model.config.block_size
     for _ in range(max_new_tokens):
-        idx_cond = idx[:, -block:]           # crop to context window
+        idx_cond = idx[:, -block:]
         logits, _ = model(idx_cond)          # (B, 1, vocab)
         nxt = _sample_from_logits(
             logits[:, -1, :], temperature, top_k, top_p, generator
@@ -102,14 +85,10 @@ def generate(
     cache=None,
     window_policy: str = "reprefill",
 ) -> torch.Tensor:
-    """Cached decoding: one prefill pass, then one token at a time.
+    """Cached decoding: prefill, then one token per step.
 
-    Cost per step drops from O(prefix_len) full-model work to O(1) model work
-    plus an O(prefix_len) attention read.
-
-    ``window_policy`` controls what happens once the context window fills up.
-    See :data:`WINDOW_POLICIES`. The default preserves output quality; the
-    alternative is faster and measurably worse, and the README shows both.
+    window_policy controls what happens once the window fills up; see
+    WINDOW_POLICIES.
     """
     if window_policy not in WINDOW_POLICIES:
         raise ValueError(f"unknown window_policy {window_policy!r}; expected one of {list(WINDOW_POLICIES)}")
@@ -122,33 +101,21 @@ def generate(
     else:
         cache.reset()
 
-    # --- prefill: process the whole prompt in one batched pass -------------
+    # prefill the whole prompt in one pass
     prompt = idx[:, -block:]
     logits, _ = model(prompt, cache=cache)
     nxt = _sample_from_logits(logits[:, -1, :], temperature, top_k, top_p, generator)
     idx = torch.cat((idx, nxt), dim=1)
 
-    # Work in chunks rather than one position at a time: both policies pay an
-    # O(window) cost when the window fills, so doing it every step would undo
-    # the caching. Handling a quarter-window at a time amortises that cost over
-    # the next block/4 steps.
+    # chunked so the O(window) cost is paid every block/4 steps, not every step
     chunk = max(1, block // 4)
 
-    # --- decode: feed back one token per step ------------------------------
     for _ in range(max_new_tokens - 1):
         if cache.length >= block:
             if window_policy == "reprefill":
-                # Recompute K/V for the recent window from scratch, so every
-                # entry carries the position embedding matching the slot it now
-                # occupies. Costs one prefill every `chunk` steps.
                 cache.reset()
                 logits, _ = model(idx[:, -(block - chunk):], cache=cache)
-            else:  # "evict"
-                # Drop the oldest entries and slide the rest forward. Cheaper -
-                # no recompute at all - but stale K/V keep the position
-                # embedding from the slot they *used* to occupy, and with
-                # learned absolute positions that mismatch degrades output
-                # badly. It is the right policy for RoPE, not for this model.
+            else:  # evict
                 cache.evict_oldest(chunk)
                 logits, _ = model(idx[:, -1:], cache=cache)
         else:
