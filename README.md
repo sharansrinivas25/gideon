@@ -382,6 +382,24 @@ against their source without rerunning anything.
 
 ---
 
+### Branching
+
+Work happens on topic branches merged into `main` with `--no-ff`, so each
+feature and each fix stays one reviewable unit in the history instead of
+dissolving into a flat list of commits. `git log --graph --oneline` shows the
+shape:
+
+| Branch | Contents |
+|---|---|
+| `feat/tokenizers` | character-level and BPE tokenisers |
+| `feat/transformer` | attention and the GPT stack |
+| `feat/kv-cache` | cache and incremental decoding |
+| `feat/quantisation-and-training` | int8, data pipeline, training loop |
+| `feat/benchmarks` | benchmark harness and figures |
+| `fix/context-window-collapse` | the position-embedding bug described above |
+| `fix/quantisation-size-measurement` | honest model-size accounting |
+| `docs/results-and-readme` | trained results and documentation |
+
 ## Testing
 
 ```
