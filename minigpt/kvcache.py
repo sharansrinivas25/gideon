@@ -58,6 +58,28 @@ class LayerKVCache:
         self.length = end
         return self.k[:, :, :end], self.v[:, :, :end]
 
+    def evict_oldest(self, n: int) -> None:
+        """Drop the ``n`` oldest positions, sliding the remainder to the front.
+
+        This is what makes generation past ``block_size`` cheap. The naive
+        alternative - reset the cache and re-prefill the recent window - costs a
+        full forward pass over the window on *every* step, which throws away the
+        entire benefit of caching exactly when the sequence is long enough for
+        it to matter.
+
+        The clone is deliberate: ``self.k[:, :, :keep] = self.k[:, :, n:len]``
+        is an overlapping copy on the same storage, and PyTorch does not
+        guarantee the result.
+        """
+        if n <= 0:
+            return
+        n = min(n, self.length)
+        keep = self.length - n
+        if keep > 0:
+            self.k[:, :, :keep] = self.k[:, :, n : self.length].clone()
+            self.v[:, :, :keep] = self.v[:, :, n : self.length].clone()
+        self.length = keep
+
     def reset(self) -> None:
         self.length = 0
 
@@ -92,6 +114,10 @@ class KVCache:
     @property
     def length(self) -> int:
         return self.layers[0].length
+
+    def evict_oldest(self, n: int) -> None:
+        for layer in self.layers:
+            layer.evict_oldest(n)
 
     def reset(self) -> None:
         for layer in self.layers:

@@ -102,7 +102,10 @@ def bench_prefill_vs_decode(model: GPT, prompt_lens: list[int], device: str = "c
         def decode_step():
             with torch.no_grad():
                 model(one, cache=cache)
-            cache.length -= 1  # keep the cache position fixed across trials
+            # Roll the cache back one slot so every trial measures a step at the
+            # same context length rather than a steadily growing one.
+            for layer in cache.layers:
+                layer.length -= 1
 
         ttft = _time_median(prefill, repeats=5)
         step = _time_median(decode_step, repeats=20, warmup=3)
@@ -146,6 +149,75 @@ def bench_quantization(model: GPT, n_tokens: int = 200, device: str = "cpu") -> 
     return out
 
 
+@torch.no_grad()
+def bench_window_policy(
+    model: GPT, tokenizer, text: str, seq_len: int = 512, device: str = "cpu"
+) -> dict:
+    """Measure what each long-context cache policy costs in *accuracy*.
+
+    Speed benchmarks alone would make ``evict`` look strictly better, which is
+    backwards. This is teacher-forced: real held-out text is fed through the
+    cached decoder one token at a time and scored against the true next token,
+    counting only positions past ``block_size`` - the region where the policies
+    actually differ.
+
+    The reference is the uncached decoder, which re-runs the full forward pass
+    over the most recent window at every step and is correct by construction.
+    """
+    block = model.config.block_size
+    ids = torch.tensor([tokenizer.encode(text)[: seq_len + 1]], dtype=torch.long, device=device)
+    n = ids.size(1) - 1
+    if n <= block:
+        raise ValueError("need a sequence longer than block_size to compare policies")
+
+    def score(step_logits: list[torch.Tensor]) -> float:
+        """Mean cross-entropy over the positions past the window."""
+        logits = torch.cat(step_logits, dim=0)                # (n, vocab)
+        targets = ids[0, 1 : n + 1]
+        keep = slice(block, n)
+        return torch.nn.functional.cross_entropy(
+            logits[keep], targets[keep]
+        ).item()
+
+    results = {}
+
+    # --- reference: no cache, full recompute over the recent window ---------
+    outs = []
+    for t in range(n):
+        ctx = ids[:, max(0, t + 1 - block) : t + 1]
+        lg, _ = model(ctx)
+        outs.append(lg[:, -1, :])
+    results["no cache (reference)"] = round(score(outs), 4)
+
+    # --- cached policies ----------------------------------------------------
+    chunk = max(1, block // 4)
+    for policy in ("reprefill", "evict"):
+        cache = model.new_cache(batch_size=1, device=device)
+        outs = []
+        for t in range(n):
+            if cache.length >= block:
+                if policy == "reprefill":
+                    cache.reset()
+                    lg, _ = model(ids[:, max(0, t + 1 - (block - chunk)) : t + 1], cache=cache)
+                else:
+                    cache.evict_oldest(chunk)
+                    lg, _ = model(ids[:, t : t + 1], cache=cache)
+            else:
+                lg, _ = model(ids[:, t : t + 1], cache=cache)
+            outs.append(lg[:, -1, :])
+        results[policy] = round(score(outs), 4)
+
+    ref = results["no cache (reference)"]
+    out = {
+        k: {"val_loss_past_window": v, "delta_vs_reference": round(v - ref, 4)}
+        for k, v in results.items()
+    }
+    for k, v in out.items():
+        print(f"  {k:22s} | loss {v['val_loss_past_window']:.4f} "
+              f"| delta {v['delta_vs_reference']:+.4f}")
+    return out
+
+
 def bench_kv_memory(config: GPTConfig) -> list[dict]:
     """KV-cache memory footprint - the thing that actually caps your batch size.
 
@@ -169,8 +241,9 @@ def main() -> None:
     args = ap.parse_args()
 
     from .checkpoint import load_checkpoint
+    from .data import download_tinyshakespeare
 
-    model, _ = load_checkpoint(args.ckpt, device=args.device)
+    model, tokenizer = load_checkpoint(args.ckpt, device=args.device)
     print(f"loaded {model.num_params():,} params from {args.ckpt}\n")
 
     results = {
@@ -192,6 +265,11 @@ def main() -> None:
 
     print("\nPrefill vs decode")
     results["prefill_decode"] = bench_prefill_vs_decode(model, [8, 32, 64, 127], args.device)
+
+    print("\nLong-context cache policy (held-out text, positions past the window)")
+    text = download_tinyshakespeare().read_text(encoding="utf-8")
+    val_text = text[int(len(text) * 0.9):]      # the same split training held out
+    results["window_policy"] = bench_window_policy(model, tokenizer, val_text, 512, args.device)
 
     print("\nQuantisation")
     results["quantization"] = bench_quantization(model, 200, args.device)
