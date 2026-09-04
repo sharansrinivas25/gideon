@@ -4,8 +4,6 @@ Equivalence with the naive decoder only holds within block_size. Past it these
 check that eviction moves the right data and long generations stay valid.
 """
 
-import time
-
 import pytest
 import torch
 
@@ -68,27 +66,40 @@ def test_long_generation_stays_valid(config):
     assert out.min() >= 0 and out.max() < config.vocab_size
 
 
-def test_long_generation_is_faster_than_naive():
-    """Past the window the cache should still beat recomputation.
+def _count_positions(model):
+    """Count token positions pushed through the model, via a forward pre-hook."""
+    seen = {"positions": 0}
 
-    Bigger model than the other tests: at toy sizes Python overhead dominates
-    and the comparison measures the interpreter, not the algorithm.
+    def hook(_module, args, kwargs):
+        idx = args[0] if args else kwargs["idx"]
+        seen["positions"] += idx.numel()
+
+    return seen, model.register_forward_pre_hook(hook, with_kwargs=True)
+
+
+def test_long_generation_does_far_less_work_than_naive():
+    """Past the window the cache should still avoid recomputation.
+
+    Counts positions fed through the model rather than timing it: wall clock
+    on a shared CI runner measures the machine's mood, not the algorithm.
     """
     torch.manual_seed(0)
-    big = GPTConfig(vocab_size=32, block_size=64, n_layer=4, n_head=4, n_embd=128, dropout=0.0)
-    model = GPT(big).eval()
+    cfg = GPTConfig(vocab_size=32, block_size=64, n_layer=2, n_head=4, n_embd=64, dropout=0.0)
+    model = GPT(cfg).eval()
     prompt = torch.zeros((1, 1), dtype=torch.long)
-    n = big.block_size * 3
+    n = cfg.block_size * 3
 
-    t0 = time.perf_counter()
+    naive, h = _count_positions(model)
     generate_naive(model, prompt, n, temperature=0.0)
-    t_naive = time.perf_counter() - t0
+    h.remove()
 
-    t0 = time.perf_counter()
+    cached, h = _count_positions(model)
     generate(model, prompt, n, temperature=0.0)
-    t_cached = time.perf_counter() - t0
+    h.remove()
 
-    assert t_cached < t_naive, f"cached {t_cached:.3f}s vs naive {t_naive:.3f}s"
+    assert cached["positions"] * 5 < naive["positions"], (
+        f'cached processed {cached["positions"]} positions, naive {naive["positions"]}'
+    )
 
 
 def test_equivalence_still_holds_within_the_window(config):
